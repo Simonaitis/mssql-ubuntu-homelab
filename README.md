@@ -52,7 +52,7 @@ Verified that `mssql-server.service` is active on Ubuntu (`10.0.0.179`) and resp
 Test-NetConnection -ComputerName 10.0.0.179 -Port 1433
 ```
 
-![Service & Network Availability Check](images/01-availability-status.png)
+![Service & Network Availability Check](images/01-availability-status.PNG)
 
 ---
 
