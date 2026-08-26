@@ -52,7 +52,7 @@ Verified that `mssql-server.service` is active on Ubuntu (`10.0.0.179`) and resp
 Test-NetConnection -ComputerName 10.0.0.179 -Port 1433
 ```
 
-![Service & Network Availability Check](images/05-availability-status.png)
+![Service & Network Availability Check](images/01-availability-status.png)
 
 ---
 
@@ -82,4 +82,4 @@ INNER JOIN Person.Person p
 GO
 ```
 
-![SSMS Query Functionality Verification](images/06-functionality-query.png)
+![SSMS Query Functionality Verification](images/02-functionality-query.png)
