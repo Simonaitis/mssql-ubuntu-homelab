@@ -1,7 +1,7 @@
 # Microsoft SQL Server 2022 on Ubuntu 22.04 LTS — Lab Log & Runbook
 
 ## Project Overview
-Deployment, network configuration, dependency resolution, and database restoration for MS SQL Server 2022 running on an Ubuntu Server host (`10.0.0.179`), managed remotely via SQL Server Management Studio (SSMS 20).
+Deployment, network configuration, dependency resolution, database restoration, and security hardening for MS SQL Server 2022 running on an Ubuntu Server host (`10.0.0.179`), managed remotely via SQL Server Management Studio (SSMS 20).
 
 ## Infrastructure Details
 * **Host Operating System:** Ubuntu Server 22.04 LTS (`10.0.0.179`)
@@ -29,6 +29,7 @@ Deployment, network configuration, dependency resolution, and database restorati
   sudo systemctl stop mssql-server
   sudo /opt/mssql/bin/mssql-conf set-sa-password
   sudo systemctl start mssql-server
+  ```
 
 ### 4. Database Restore Path & File Ownership Fixes
 * **Problem:** Restoring `AdventureWorks2022` from SSMS failed with **Operating System Error 2 (The system cannot find the file specified)**.
@@ -40,6 +41,60 @@ Deployment, network configuration, dependency resolution, and database restorati
 
   # Set mssql service account ownership
   sudo chown mssql:mssql /var/opt/mssql/data/AdventureWorks2022.bak
+  ```
+  ```sql
+  -- Restore T-SQL executed in SSMS
+  RESTORE DATABASE AdventureWorks2022
+  FROM DISK = N'/var/opt/mssql/data/AdventureWorks2022.bak'
+  WITH MOVE 'AdventureWorks2022' TO '/var/opt/mssql/data/AdventureWorks2022.mdf',
+       MOVE 'AdventureWorks2022_log' TO '/var/opt/mssql/data/AdventureWorks2022_log.ldf';
+  ```
+
+---
+
+## Security Hardening & Data Reporting
+
+### 1. Role-Based Access Control (RBAC) & Least Privilege
+* **Objective:** Enforce security policies by creating a dedicated, low-privilege read-only service account for application and reporting tasks, avoiding administrative `sa` account usage.
+* **Implementation (T-SQL):**
+  ```sql
+  USE AdventureWorks2022;
+  GO
+
+  -- Create login and database user mapped to db_datareader
+  CREATE LOGIN ReportingUser WITH PASSWORD = 'StrongPassword123!';
+  CREATE USER ReportingUser FOR LOGIN ReportingUser;
+  ALTER ROLE db_datareader ADD MEMBER ReportingUser;
+  GO
+  ```
+
+![RBAC Security Configuration](images/01-rbac-user-creation.PNG)
+
+---
+
+### 2. Relational Reporting View (`vw_EmployeeDepartmentRoster`)
+* **Objective:** Simplify operational reporting by abstracting a 4-table relational join (`Employee`, `Person`, `EmployeeDepartmentHistory`, `Department`) into a reusable database View.
+* **Implementation (T-SQL):**
+  ```sql
+  USE AdventureWorks2022;
+  GO
+
+  CREATE VIEW dbo.vw_EmployeeDepartmentRoster AS
+  SELECT 
+      e.BusinessEntityID AS EmployeeID,
+      p.FirstName + ' ' + p.LastName AS FullName,
+      e.JobTitle,
+      d.Name AS Department,
+      e.HireDate
+  FROM HumanResources.Employee e
+  INNER JOIN Person.Person p ON e.BusinessEntityID = p.BusinessEntityID
+  INNER JOIN HumanResources.EmployeeDepartmentHistory edh ON e.BusinessEntityID = edh.BusinessEntityID
+  INNER JOIN HumanResources.Department d ON edh.DepartmentID = d.DepartmentID
+  WHERE edh.EndDate IS NULL;
+  GO
+  ```
+
+![Relational Reporting View Deployment](images/02-reporting-view.PNG)
 
 ---
 
@@ -52,7 +107,7 @@ Verified that `mssql-server.service` is active on Ubuntu (`10.0.0.179`) and resp
 Test-NetConnection -ComputerName 10.0.0.179 -Port 1433
 ```
 
-![Service & Network Availability Check](images/01-availability-status.PNG)
+![Service & Network Availability Check](images/03-availability-status.png)
 
 ---
 
@@ -70,16 +125,10 @@ SELECT
     SERVERPROPERTY('Edition') AS SQLEdition;
 GO
 
--- 2. Validate database data retrieval and table joins
-SELECT TOP 10 
-    p.FirstName, 
-    p.LastName, 
-    e.JobTitle, 
-    e.HireDate
-FROM HumanResources.Employee e
-INNER JOIN Person.Person p 
-    ON e.BusinessEntityID = p.BusinessEntityID;
+-- 2. Validate data extraction via newly deployed reporting view
+SELECT TOP 10 * 
+FROM dbo.vw_EmployeeDepartmentRoster;
 GO
 ```
 
-![SSMS Query Functionality Verification](images/02-functionality-query.png)
+![SSMS Query Functionality Verification](images/04-functionality-query.PNG)
